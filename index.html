@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body,#root{height:100%;width:100%;font-family:'Open Sans',sans-serif}
@@ -28,7 +29,7 @@ select option{background:#4a6670;color:#fff}
 <body>
 <div id="root"></div>
 <script type="text/javascript">
-const{useState,useEffect,useCallback,useMemo}=React;
+const{useState,useEffect,useCallback,useMemo,useRef}=React;
 
 const CFG={
 clientId:"3d4831d6-52f2-418d-8ff6-84c068fcaa39",
@@ -67,6 +68,55 @@ const FILTERS=[
 
 const cl={bg:"#d6dde0",pri:"#4a6670",dk:"#00126b",acc:"#9a6670",wh:"#fff",lt:"#7fa2b0",tx:"#323130",bd:"#4a6670"};
 
+function generatePODPdf(row,sigDataURL){
+var isPBO=(v(row,P.BillProv)||"").indexOf("Plymouth Bay")>=0;
+var EN=isPBO?"PLYMOUTH BAY ORTHOPEDICS":"NEW ENGLAND MEDICAL SOLUTIONS";
+var EADDR=isPBO?"41 RESNIK RD, PLYMOUTH, MA 02360":"PO BOX 10232, BEDFORD, NH 03110";
+var doc=new jspdf.jsPDF({orientation:"p",unit:"mm",format:"letter"});
+var W=215.9,M=18,PW=W-2*M,y=15;
+doc.setFont("helvetica","bold");doc.setFontSize(16);doc.text(EN,W/2,y,{align:"center"});
+y+=6;doc.setFont("helvetica","normal");doc.setFontSize(9);doc.text(EADDR,W/2,y,{align:"center"});
+y+=4;doc.text("PHONE: 603-703-4789 FAX: 603-676-0000",W/2,y,{align:"center"});
+y+=10;doc.setFont("helvetica","bold");doc.setFontSize(12);doc.text("Patient Rental Agreement and Proof of Delivery",W/2,y,{align:"center"});
+y+=10;doc.setLineWidth(0.3);doc.line(M,y,W-M,y);y+=8;
+var now=new Date();var mm=String(now.getMonth()+1).padStart(2,"0");var dd=String(now.getDate()).padStart(2,"0");var yyyy=now.getFullYear();var dosStr=mm+"/"+dd+"/"+yyyy;
+doc.setFont("helvetica","bold");doc.setFontSize(11);
+doc.text(dosStr,M,y);doc.text(v(row,P.First)+" "+v(row,P.Last),M+55,y);doc.text(v(row,P.DOB)||"",W-M-5,y,{align:"right"});
+y+=4;doc.setFont("helvetica","normal");doc.setFontSize(7);
+doc.text("Date of Service",M,y);doc.text("Patient's Name",M+55,y);doc.text("DOB (MM/DD/YYYY)",W-M-5,y,{align:"right"});
+y+=8;doc.setFontSize(7);doc.text("Delivery Address:",M,y);
+doc.setFont("helvetica","bold");doc.setFontSize(11);
+doc.text(v(row,P.Addr)||"",M+28,y);
+var ax=M+120;doc.text(v(row,P.City)||"",ax,y);doc.text(v(row,P.State)||"",ax+40,y);
+var zip=v(row,P.Zip)||"";if(/^\d+$/.test(zip))zip=zip.padStart(5,"0");doc.text(zip,ax+55,y);
+y+=4;doc.setFont("helvetica","normal");doc.setFontSize(7);
+doc.text("Street",M+28,y);doc.text("City",ax,y);doc.text("State",ax+40,y);doc.text("Zip",ax+55,y);
+y+=8;doc.setFontSize(7);doc.text("Product Description:",M,y);
+var prods=[];for(var i=0;i<14;i++){var nm=v(row,P.P1+i*4);if(nm)prods.push(nm);}
+doc.setFont("helvetica","normal");doc.setFontSize(10);doc.text(prods.join(", ")||"",M+30,y);
+y+=8;doc.setFontSize(9);doc.text("Start Date: "+dosStr,M,y);doc.text("Stop Date: _____/_____/_____",M+60,y);
+y+=8;doc.setFont("helvetica","bold");doc.setFontSize(13);
+var sns=[];for(var i=0;i<14;i++){var sn=v(row,P.P1+i*4+3);if(sn)sns.push(sn);}
+var snStr=sns.join(" + ")||"N/A";doc.text("SERIAL NUMBER:",M,y);
+var snX=M+doc.getTextWidth("SERIAL NUMBER: ");doc.setFillColor(255,255,0);doc.rect(snX-1,y-4.5,doc.getTextWidth(snStr)+4,6.5,"F");
+doc.setFont("helvetica","bold");doc.text(snStr,snX+1,y);
+y+=10;doc.setFontSize(7.5);doc.setFont("helvetica","normal");
+var p1="Patient Product Education Patient Bill of Rights and Responsibilities: By signing below I acknowledge, authorize, and understand that "+EN+" is the provider of the medical products I am receiving today which are prescribed by my physician. I authorize "+EN+" and its Business Partners to deliver, teach, administer or perform, as necessary, the product and treatment prescribed by my physician. I have been instructed in the proper fitting and usage of the product(s) received. I understand that once the equipment has been used it is no longer able to be returned (unless rental item), refunded or re-sized. I have been instructed to contact my physician for any questions or concerns related to my medical care or status. Warranty: we will honor all warranties honored by the manufacturer of the product. If the product becomes defective, it is your responsibility to notify "+EN+" immediately and its Business Partners to resolve the situation in a timely manner. Failure to notify will lead to missed treatments prescribed by your physician. (You Must Call "+EN+"). I acknowledge that I have been given the patient manual, product warranty, package, and instructions on how to contact "+EN+". I have also received a copy of the Notice of Privacy Practices.";
+var p2="Assignment of Benefit (AOB), Release of Information, Estimated Patient Responsibility: By Signing below, I authorize "+EN+" or its Business Partners to submit a claim for such product(s) to my insurer on my behalf and assign the benefits payable to my insurer for such products. I authorize my health Care Provider and "+EN+" to release medical Information required by my insurer or attorney to process the claim. I understand that any patient responsibility amount provided to me by "+EN+" or their representative is an ESTIMATE only. If I have more coverage than written above, it is my responsibility to notify "+EN+". I understand that there is no guarantee of payment by my insurer and that regardless of insurance coverage I am ultimately responsible for my bill. I further understand that the pre-authorization process is a courtesy by "+EN+" and its Business Partners, and it is my responsibility to contact my insurer if I have questions about my potential financial obligations for the product. I certify by signing below that I prefer the product(s) I am receiving/ordered are prescribed by my physician and will be billed to my insurance by "+EN+". I request payment of authorized insurance benefits for related services to the supplier. I acknowledge and understand by signing below that I am responsible for all charges for products received by me. Although I am requesting "+EN+" and its Business Partners to bill my insurance company on my behalf, I understand that it is still my responsibility to ensure the claim is paid in a reasonable time. I agree to provide a credit card number for billing, if applicable, for any reason any portion of my bill is not paid by my insurance, I further agree to make arrangements for my prompt payment of the bill. (You will receive a separate statement for any co-insurance, deductible or non-covered Items.)";
+var l1=doc.splitTextToSize(p1,PW);doc.text(l1,M,y);y+=l1.length*3+2;
+var l2=doc.splitTextToSize(p2,PW);doc.text(l2,M,y);y+=l2.length*3+3;
+doc.setFont("helvetica","bold");doc.setFontSize(8);doc.text("A Workers' Comp patient is never responsible for a bill.",M,y);
+y+=10;doc.setLineWidth(0.3);doc.line(M,y,M+110,y);doc.line(M+130,y,W-M,y);
+if(sigDataURL){try{doc.addImage(sigDataURL,"PNG",M+2,y-18,80,16);}catch(e){}}
+doc.setFont("helvetica","normal");doc.setFontSize(10);doc.text(dosStr,M+132,y-2);
+y+=4;doc.setFontSize(8);doc.text("Patient Signature",M,y);doc.text("Date",M+130,y);
+y+=8;doc.setFontSize(8);doc.text("If signature is other than patient, please complete the following:",M,y);
+y+=8;doc.line(M,y,M+70,y);doc.line(M+80,y,M+115,y);doc.line(M+125,y,W-M,y);
+y+=4;doc.setFontSize(7);doc.text("Printed Name of Person Signing Above",M,y);doc.text("Relationship to Patient",M+80,y);doc.text("Area Code/Telephone",M+125,y);
+y+=12;doc.setFont("helvetica","bold");doc.setFontSize(9);doc.text("ORIGINAL - "+EN,M+20,y);doc.text("COPY - PATIENT",W-M-20,y,{align:"right"});
+return doc;
+}
+
 // Demo data
 function genPL(){
 const nm=[["John","Smith"],["Jane","Doe"],["Mike","Johnson"],["Sarah","Williams"],["Tom","Brown"],["Lisa","Davis"],["Chris","Miller"],["Amy","Wilson"],["David","Moore"],["Emily","Taylor"]];
@@ -82,7 +132,7 @@ row[P.AcctMgr]=["Mason Palmieri","Sean Spillane","Nick Angelini"][i%3];
 row[P.BodyPart]=bp[i%bp.length];row[P.DOS]=(1+i%12)+"/"+(1+i%28)+"/2025";
 row[P.Email]=f.toLowerCase()+"@email.com";row[P.Addr]=(100+i)+" Main St";
 row[P.City]="Providence";row[P.State]="RI";row[P.Zip]="02903";row[P.Phone]="(401)555-"+String(1000+i).slice(-4);
-row[P.RefPartner]=ac[i%ac.length];row[P.P1]=pr[i%pr.length];row[P.P1+1]="1";row[P.P1+2]=st[i%st.length];
+row[P.DOB]=(1+i%12)+"/"+(1+i%28)+"/"+(1970+i);row[P.BillProv]=i%5===0?"Plymouth Bay Orthopedics":"New England Medical Solutions";row[P.FulfType]=["In Person","Shipping","Dropshipment"][i%3];row[P.RefPartner]=ac[i%ac.length];row[P.P1]=pr[i%pr.length];row[P.P1+1]="1";row[P.P1+2]=st[i%st.length];
 if(i%3===0){row[P.P1+4]=pr[(i+1)%pr.length];row[P.P1+5]="1";row[P.P1+6]=st[i%st.length];}
 if(i%5===0)row[P.RptStatus]="Not in Report";if(i%7===0)row[P.UrgOrd]="Yes";
 if(i%4===0){row[P.FulAct]="Fitting";row[P.Status]="Needs Equipment";}
@@ -137,8 +187,14 @@ open&&isSer&&avail.length===0&&React.createElement("div",{style:{position:"absol
 );
 }
 
-function Detail({row,idx,onClose,onSave,demo,assets,catalog,filter}){
-const[ed,setEd]=useState({});const[saving,setSaving]=useState(false);const[showMsg,setShowMsg]=useState(false);const[preAuth,setPreAuth]=useState(false);
+function Detail({row,idx,onClose,onSave,demo,assets,catalog,filter,token}){
+const[ed,setEd]=useState({});const[saving,setSaving]=useState(false);const[showMsg,setShowMsg]=useState(false);const[preAuth,setPreAuth]=useState(false);const[showPOD,setShowPOD]=useState(false);const[podSaving,setPodSaving]=useState(false);
+var sigRef=useRef(null);var drawRef=useRef(false);var lastPos=useRef({x:0,y:0});
+function sigStart(e){e.preventDefault();drawRef.current=true;var r=sigRef.current.getBoundingClientRect();var cx=e.touches?e.touches[0].clientX:e.clientX;var cy=e.touches?e.touches[0].clientY:e.clientY;lastPos.current={x:cx-r.left,y:cy-r.top};}
+function sigMove(e){if(!drawRef.current||!sigRef.current)return;e.preventDefault();var r=sigRef.current.getBoundingClientRect();var cx=e.touches?e.touches[0].clientX:e.clientX;var cy=e.touches?e.touches[0].clientY:e.clientY;var x=cx-r.left,y2=cy-r.top;var ctx=sigRef.current.getContext("2d");ctx.lineWidth=2;ctx.strokeStyle="#000";ctx.lineCap="round";ctx.beginPath();ctx.moveTo(lastPos.current.x,lastPos.current.y);ctx.lineTo(x,y2);ctx.stroke();lastPos.current={x:x,y:y2};}
+function sigEnd(){drawRef.current=false;}
+function sigClear(){if(sigRef.current){var ctx=sigRef.current.getContext("2d");ctx.clearRect(0,0,sigRef.current.width,sigRef.current.height);}}
+async function savePOD(){setPodSaving(true);try{var sigData=sigRef.current?sigRef.current.toDataURL():null;var doc=generatePODPdf(row,sigData);var isPBO=(v(row,P.BillProv)||"").indexOf("Plymouth Bay")>=0;var now=new Date();var fm=String(now.getMonth()+1).padStart(2,"0");var fd=String(now.getDate()).padStart(2,"0");var fy=String(now.getFullYear()).slice(-2);var fn="POD "+v(row,P.Last)+v(row,P.First)+"_"+fm+"."+fd+"."+fy+".pdf";if(demo||!token){doc.save(fn);}else{var folder=isPBO?"PBOA":"NEMS";var spPath="New England Medical Solutions/Operations/Proof of Delivery/"+folder+"/"+fn;await fetch("https://graph.microsoft.com/v1.0/drives/"+CFG.driveId+"/root:/"+encodeURI(spPath)+":/content",{method:"PUT",headers:{"Authorization":"Bearer "+token,"Content-Type":"application/pdf"},body:doc.output("blob")});}setShowPOD(false);}catch(e){alert("POD save error: "+e.message);}setPodSaving(false);}
 var isMobile=window.innerWidth<900;
 const prods=[];for(let i=0;i<14;i++)if(v(row,P.P1+i*4))prods.push(i);
 const save=async function(){setSaving(true);await onSave(idx,ed,row);setSaving(false);onClose();};
@@ -216,6 +272,7 @@ React.createElement("div",{style:{display:"flex",justifyContent:"space-between",
 React.createElement("span",{style:{fontWeight:700,fontSize:11,color:cl.dk}},"Task Actions"),
 React.createElement("div",{style:{display:"flex",gap:4,flexWrap:"wrap"}},
 React.createElement("button",{onClick:function(){setShowMsg(true)},style:{background:"#6c3483",color:cl.wh,border:"none",borderRadius:3,padding:"3px 8px",fontSize:9,cursor:"pointer",fontFamily:"inherit"}},"Draft Message"),
+React.createElement("button",{onClick:function(){setShowPOD(true)},style:{background:"#1565c0",color:cl.wh,border:"none",borderRadius:3,padding:"3px 8px",fontSize:9,cursor:"pointer",fontFamily:"inherit"}},"Proof of Delivery"),
 (tasks.indexOf("FitNeed")>=0||tasks.indexOf("UrgOrd")>=0)&&React.createElement("button",{onClick:schedFitting,style:{background:"#2e7d32",color:cl.wh,border:"none",borderRadius:3,padding:"3px 8px",fontSize:9,cursor:"pointer",fontFamily:"inherit"}},"Schedule Fitting"),
 tasks.indexOf("PickNeed")>=0&&React.createElement("button",{onClick:schedPickup,style:{background:"#2e7d32",color:cl.wh,border:"none",borderRadius:3,padding:"3px 8px",fontSize:9,cursor:"pointer",fontFamily:"inherit"}},"Schedule Pickup"),
 tasks.indexOf("FulNeed")>=0&&React.createElement("button",{onClick:markShipped,style:{background:"#1565c0",color:cl.wh,border:"none",borderRadius:3,padding:"3px 8px",fontSize:9,cursor:"pointer",fontFamily:"inherit"}},"Mark Shipped"),
@@ -310,11 +367,50 @@ React.createElement("button",{onClick:function(){setShowMsg(false)},style:{backg
 )
 )
 )
+),
+// Proof of Delivery Modal
+showPOD&&React.createElement("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:1100,display:"flex",justifyContent:"center",alignItems:"flex-start",paddingTop:20,overflowY:"auto"}},
+React.createElement("div",{style:{background:cl.wh,borderRadius:8,width:"95%",maxWidth:650,boxShadow:"0 8px 32px rgba(0,0,0,.3)",marginBottom:20}},
+React.createElement("div",{style:{background:"#1565c0",padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",borderRadius:"8px 8px 0 0"}},
+React.createElement("span",{style:{color:cl.wh,fontWeight:700,fontSize:13}},"Proof of Delivery \u2014 "+v(row,P.First)+" "+v(row,P.Last)),
+React.createElement("button",{onClick:function(){setShowPOD(false)},style:{background:"none",border:"none",color:cl.wh,fontSize:18,cursor:"pointer",fontWeight:700}},"\u00d7")
+),
+React.createElement("div",{style:{padding:16}},
+// Template indicator
+React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,padding:"8px 12px",background:(v(row,P.BillProv)||"").indexOf("Plymouth Bay")>=0?"#e8f5e9":"#e3f2fd",borderRadius:6,fontSize:11}},
+React.createElement("span",{style:{fontWeight:700,color:cl.dk}},(v(row,P.BillProv)||"").indexOf("Plymouth Bay")>=0?"PLYMOUTH BAY ORTHOPEDICS":"NEW ENGLAND MEDICAL SOLUTIONS"),
+React.createElement("span",{style:{color:"#666",fontSize:10}},"Template: "+((v(row,P.BillProv)||"").indexOf("Plymouth Bay")>=0?"PBO DT":"NEMS DT"))
+),
+// Pre-filled fields preview
+React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12,fontSize:11}},
+React.createElement("div",null,React.createElement("div",{style:{fontSize:9,color:"#666",fontWeight:600}},"Date of Service"),React.createElement("div",{style:{fontWeight:500,padding:"4px 0",borderBottom:"1px solid #ddd"}},new Date().toLocaleDateString("en-US"))),
+React.createElement("div",null,React.createElement("div",{style:{fontSize:9,color:"#666",fontWeight:600}},"Patient Name"),React.createElement("div",{style:{fontWeight:500,padding:"4px 0",borderBottom:"1px solid #ddd"}},v(row,P.First)+" "+v(row,P.Last))),
+React.createElement("div",null,React.createElement("div",{style:{fontSize:9,color:"#666",fontWeight:600}},"DOB"),React.createElement("div",{style:{fontWeight:500,padding:"4px 0",borderBottom:"1px solid #ddd"}},v(row,P.DOB)||"\u2014")),
+React.createElement("div",null,React.createElement("div",{style:{fontSize:9,color:"#666",fontWeight:600}},"Address"),React.createElement("div",{style:{fontWeight:500,padding:"4px 0",borderBottom:"1px solid #ddd",fontSize:10}},v(row,P.Addr)+", "+v(row,P.City)+", "+v(row,P.State)+" "+(function(){var z=v(row,P.Zip)||"";return/^\d+$/.test(z)?z.padStart(5,"0"):z})())),
+React.createElement("div",null,React.createElement("div",{style:{fontSize:9,color:"#666",fontWeight:600}},"Product(s)"),React.createElement("div",{style:{fontWeight:500,padding:"4px 0",borderBottom:"1px solid #ddd"}},(function(){var pp=[];for(var i=0;i<14;i++){var nm=v(row,P.P1+i*4);if(nm)pp.push(nm);}return pp.join(", ")||"\u2014"})())),
+React.createElement("div",null,React.createElement("div",{style:{fontSize:9,color:"#666",fontWeight:600}},"Serial Number(s)"),React.createElement("div",{style:{fontWeight:700,padding:"4px 0",borderBottom:"1px solid #ddd",color:"#1565c0"}},(function(){var ss=[];for(var i=0;i<14;i++){var sn=v(row,P.P1+i*4+3);if(sn)ss.push(sn);}return ss.join(" + ")||"\u2014"})()))
+),
+// Signature pad
+React.createElement("div",{style:{marginTop:8}},
+React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}},
+React.createElement("span",{style:{fontWeight:700,fontSize:12,color:cl.dk}},"Patient Signature"),
+React.createElement("button",{onClick:sigClear,style:{background:cl.acc,color:cl.wh,border:"none",borderRadius:3,padding:"4px 12px",fontSize:10,cursor:"pointer",fontFamily:"inherit"}},"Clear Signature")
+),
+React.createElement("canvas",{ref:function(c){sigRef.current=c},width:580,height:140,style:{width:"100%",height:140,border:"2px solid "+cl.bd,borderRadius:6,cursor:"crosshair",touchAction:"none",background:"#fafafa"},onMouseDown:sigStart,onMouseMove:sigMove,onMouseUp:sigEnd,onMouseLeave:sigEnd,onTouchStart:sigStart,onTouchMove:sigMove,onTouchEnd:sigEnd}),
+React.createElement("div",{style:{fontSize:9,color:"#999",marginTop:4,textAlign:"center"}},"Sign above with mouse or touch")
+),
+// Action buttons
+React.createElement("div",{style:{display:"flex",gap:8,marginTop:14,justifyContent:"flex-end"}},
+React.createElement("button",{onClick:function(){setShowPOD(false)},style:{background:cl.acc,color:cl.wh,border:"none",borderRadius:4,padding:"10px 18px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}},"Cancel"),
+React.createElement("button",{onClick:savePOD,disabled:podSaving,style:{background:"#1565c0",color:cl.wh,border:"none",borderRadius:4,padding:"10px 18px",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",opacity:podSaving?0.6:1}},podSaving?"Saving\u2026":(demo?"Generate & Download PDF":"Generate & Save to SharePoint"))
+)
+)
+)
 )
 );
 }
 
-function PLTasks({data,isDemo,onSave,assets,catalog}){
+function PLTasks({data,isDemo,onSave,assets,catalog,token}){
 const[flt,setFlt]=useState("");const[srch,setSrch]=useState("");
 const[stFlt,setStFlt]=useState("");const[sel,setSel]=useState(null);
 const[detail,setDetail]=useState(false);
@@ -358,7 +454,7 @@ React.createElement("div",{style:{fontSize:10,fontStyle:"italic",color:"#777",ma
 );})
 )
 ),
-detail&&sel!==null&&data[sel]&&React.createElement(Detail,{row:data[sel],idx:sel,onClose:function(){setDetail(false)},onSave:onSave,demo:isDemo,assets:assets,catalog:catalog,filter:flt})
+detail&&sel!==null&&data[sel]&&React.createElement(Detail,{row:data[sel],idx:sel,onClose:function(){setDetail(false)},onSave:onSave,demo:isDemo,assets:assets,catalog:catalog,filter:flt,token:token})
 );
 }
 
@@ -457,7 +553,7 @@ isDemo?React.createElement("button",{onClick:login,style:{background:cl.wh,color
 ),
 error&&React.createElement("div",{style:{background:"#e74c3c",color:cl.wh,padding:"5px 14px",fontSize:12}},error,React.createElement("button",{onClick:function(){setError("")},style:{float:"right",background:"none",border:"none",color:cl.wh,cursor:"pointer"}},"\u00d7")),
 React.createElement("div",{style:{flex:1,display:"flex",overflow:"hidden"}},
-page==="pl"&&React.createElement(PLTasks,{data:plData,isDemo:isDemo,onSave:handleSave,assets:saData,catalog:pcData}),
+page==="pl"&&React.createElement(PLTasks,{data:plData,isDemo:isDemo,onSave:handleSave,assets:saData,catalog:pcData,token:token}),
 page==="aa"&&React.createElement(Stub,{title:"Athletic Accident Report",desc:"Benefits verification, credentialling, eligibility.",tables:["AAReport","AAARReport"],features:["Benefits Verification + email","Credentialling Needed","Additional Info","Eligibility Check"]}),
 page==="wcar"&&React.createElement(Stub,{title:"WC AR Report",desc:"Workers' comp claim followup.",tables:["WCARReport","WorkCompARReport"],features:["Claim Followup Needed","HCPCS line items","Send Followup Email","Status Date update"]}),
 page==="po"&&React.createElement(Stub,{title:"Purchasing",desc:"PO creation, editing, approval.",tables:["Purchasing","ProductCatalog"],features:["Browse/search POs","Create/Edit PO","PO Approval","Draft to POShell"]}),
