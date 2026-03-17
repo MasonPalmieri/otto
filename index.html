@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Otto - NEMS Operations Platform</title>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body,#root{height:100%;width:100%;font-family:'Open Sans',sans-serif}
+input::placeholder{color:rgba(255,255,255,.5)}
+select option{background:#4a6670;color:#fff}
+::-webkit-scrollbar{width:8px}
+::-webkit-scrollbar-track{background:#d6dde0}
+::-webkit-scrollbar-thumb{background:#4a6670;border-radius:4px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media(max-width:900px){
+  .otto-nav-btns{flex-wrap:wrap!important;gap:4px!important}
+  .otto-nav-btns button{font-size:10px!important;padding:4px 6px!important}
+  .otto-header-brand{font-size:16px!important}
+  .otto-header-sub{display:none!important}
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/javascript">
+const{useState,useEffect,useCallback,useMemo}=React;
+
+const CFG={
+clientId:"3d4831d6-52f2-418d-8ff6-84c068fcaa39",
+tenantId:"5aa830fb-a199-413e-b6be-a9e217b0d49f",
+driveId:"b!n07ggQPPyE6vkIzyE1cFkWv8e_m5rBJNtOEYrg_X4JubX2zC8_uyQLDt61xrgK6w",
+itemId:"01W5BQBH32R5BI3MRM6BDJ6MVHHH4JIFV3",
+redirectUri:window.location.origin+window.location.pathname,
+scopes:["Files.ReadWrite.All","Sites.ReadWrite.All","User.Read"],
+};
+
+// PatientLog columns
+const P={PATID:0,First:1,Last:2,Status:3,BillProv:4,InsType:5,OrdType:6,FulfType:7,RptStatus:8,Provider:9,RefPartner:10,RefBy:11,AcctMgr:12,DOB:13,Addr:14,City:15,State:16,Zip:17,Phone:18,Phone2:19,Email:20,BodyPart:45,DOS:46,CourtCall:47,FeedForm:48,InvAssign:49,RentalPurch:51,P1:53,Tracking:115,RetTracking:117,BookDel:119,FitDate:120,BookRet:121,PickRetDate:122,OrdNotRpt:129,UrgOrd:130,FulAct:131,PickNeed:132,RetNeed:133,SvcUpd:134,CourtNeed:135,ExtConf:136,FeedChk:137,SxPost:138,Account:140,PORef:145};
+const SA={ItemCode:0,Mfr:1,Desc:2,SN:3,Active:4,Status:5,StatusDate:6,AssignedTo:7,LastCleaned:8,PatID:9,Provider:10,RepairDate:11,TotalUse:12,RunTime:13,Notes:14,USN:15,Revenue:16};
+const PC={ItemCode:0,Mfr:1,Desc:2,HCPCS:3,HCPCSDesc:4,Cat:5,UM:6,Cost:7,Serialized:8};
+
+function v(r,c){return (r && r[c] != null) ? r[c] : "";}
+const STATUSES=["Needs Equipment","Needs Fulfillment","Needs PO","Fitting Scheduled","Ready for Fulfillment","Ready for PO","PO Submitted","Shipped","Has Equipment","Sold","Ready for Pickup","Ready for Return","Pickup Scheduled","Return Shipped","Equipment Returned","Cancelled","Surgery Postponed","RCM"];
+const PROD_ST=["Needs Equipment","Needs Fulfillment","Needs PO","Fitting Scheduled","Ready for Fulfillment","Ready for PO","PO Submitted","Shipped","With Patient","Sold","Ready for Pickup","Ready for Return","Pickup Scheduled","Return Shipped","Equipment Returned","RCM"];
+
+function plToAsset(s){return ({"With Patient":"With Patient","Shipped":"Shipped","Ready for Pickup":"Ready For Pickup","Ready for Return":"Ready for Return","Equipment Returned":"Ready for Cleaning","Return Shipped":"Return Shipped","Pickup Scheduled":"Pickup Scheduled"}[s]||"");}
+
+const FILTERS=[
+{key:"RptEntry",label:"Report Entry",fn:function(r){return v(r,P.RptStatus)==="Not in Report"}},
+{key:"FitNeed",label:"Fittings Needed",fn:function(r){return v(r,P.FulAct)==="Fitting"&&v(r,P.Status)!=="Fitting Scheduled"&&!v(r,P.FitDate)}},
+{key:"PickNeed",label:"Pickups Needed",fn:function(r){return v(r,P.PickNeed)==="Yes"}},
+{key:"Court",label:"Courtesy Calls",fn:function(r){return v(r,P.CourtNeed)==="Yes"&&!v(r,P.CourtCall)}},
+{key:"UrgOrd",label:"Urgent Order",fn:function(r){return v(r,P.UrgOrd)==="Yes"}},
+{key:"FulNeed",label:"Fulfillment Needed",fn:function(r){return v(r,P.FulAct)==="Fulfillment"&&v(r,P.Status)!=="Shipped"}},
+{key:"RetNeed",label:"Returns Needed",fn:function(r){return (v(r,P.RetNeed)==="Yes")&&v(r,P.Status)!=="Equipment Returned"}},
+{key:"Ext",label:"Ext Confirmations",fn:function(r){return !!v(r,P.ExtConf)}},
+{key:"SxPost",label:"Sx Postponements",fn:function(r){return v(r,P.Status)==="Surgery Postponed"}},
+{key:"DropNeed",label:"Dropshipments Needed",fn:function(r){return v(r,P.FulAct)==="Dropshipment"&&!v(r,P.PORef)}},
+{key:"SvcUpd",label:"Status Updates",fn:function(r){return v(r,P.SvcUpd)==="Yes"}},
+{key:"Feed",label:"Feedback Forms",fn:function(r){return v(r,P.FeedChk)==="Yes"&&!v(r,P.FeedForm)}},
+];
+
+const cl={bg:"#d6dde0",pri:"#4a6670",dk:"#00126b",acc:"#9a6670",wh:"#fff",lt:"#7fa2b0",tx:"#323130",bd:"#4a6670"};
+
+// Demo data
+function genPL(){
+const nm=[["John","Smith"],["Jane","Doe"],["Mike","Johnson"],["Sarah","Williams"],["Tom","Brown"],["Lisa","Davis"],["Chris","Miller"],["Amy","Wilson"],["David","Moore"],["Emily","Taylor"]];
+const st=["Needs Equipment","Fitting Scheduled","Shipped","Has Equipment","Ready for Return","PO Submitted"];
+const ins=["Work Comp","TRICARE","Self Pay","Medicare"];const pv=["Smith, Dr.","Jones, Dr.","Brown, Dr."];
+const ac=["Ortho RI","Cape Cod Ortho","Brigham Sports"];const bp=["R Knee","L Shoulder","R Hip"];
+const pr=["Therm-X HOME Model","SQUID GO KNEE FULL UNIT","SAM 2.0","Therm-X Knee Garment, Durable","NICE1 Therapy System"];
+const rows=[];
+for(let i=0;i<30;i++){var row=new Array(147).fill("");var fl=nm[i%nm.length];var f=fl[0],l=fl[1];
+row[P.PATID]="PATID"+(1300+i);row[P.First]=f;row[P.Last]=l;row[P.Status]=st[i%st.length];
+row[P.InsType]=ins[i%ins.length];row[P.Provider]=pv[i%pv.length];row[P.Account]=ac[i%ac.length];
+row[P.AcctMgr]=["Mason Palmieri","Sean Spillane","Nick Angelini"][i%3];
+row[P.BodyPart]=bp[i%bp.length];row[P.DOS]=(1+i%12)+"/"+(1+i%28)+"/2025";
+row[P.Email]=f.toLowerCase()+"@email.com";row[P.Addr]=(100+i)+" Main St";
+row[P.City]="Providence";row[P.State]="RI";row[P.Zip]="02903";row[P.Phone]="(401)555-"+String(1000+i).slice(-4);
+row[P.RefPartner]=ac[i%ac.length];row[P.P1]=pr[i%pr.length];row[P.P1+1]="1";row[P.P1+2]=st[i%st.length];
+if(i%3===0){row[P.P1+4]=pr[(i+1)%pr.length];row[P.P1+5]="1";row[P.P1+6]=st[i%st.length];}
+if(i%5===0)row[P.RptStatus]="Not in Report";if(i%7===0)row[P.UrgOrd]="Yes";
+if(i%4===0){row[P.FulAct]="Fitting";row[P.Status]="Needs Equipment";}
+if(i%8===0)row[P.PickNeed]="Yes";if(i%9===0){row[P.RetNeed]="Yes";row[P.Status]="Ready for Return";}
+if(i%10===0)row[P.SvcUpd]="Yes";if(i%11===0)row[P.CourtNeed]="Yes";
+if(i%13===0)row[P.ExtConf]="Extension 1";if(i%12===0)row[P.FeedChk]="Yes";
+rows.push(row);
+}return rows;
+}
+function genSA(){
+const codes=["TX0300","TX0300","TX0300","TX0300","TX0300","TX0101","TX0101","CAT-40002","CAT-40002","SA271","TX0110","TX0110","TX0002","TX0002"];
+const descs={"TX0300":"Therm-X HOME Model","TX0101":"Therm-X Knee Garment, Durable","CAT-40002":"SQUID GO KNEE FULL UNIT","SA271":"SAM 2.0","TX0110":"Therm-X Shoulder Garment, Durable","TX0002":"NICE1 Therapy System"};
+const sts=["Available","Available","With Patient","Ready for Cleaning","Available","Available","With Patient","Available","Ready for Cleaning","Available","Available","With Patient","Available","Available"];
+return codes.map(function(c,i){var r=new Array(17).fill("");r[SA.ItemCode]=c;r[SA.Mfr]="ZTI";r[SA.Desc]=descs[c];r[SA.SN]=String(1000+i).padStart(5,"0");r[SA.Active]="TRUE";r[SA.Status]=sts[i];r[SA.StatusDate]="1/1/2025";r[SA.AssignedTo]="Mason Palmieri";r[SA.USN]=c+String(1000+i).padStart(5,"0");if(sts[i]==="With Patient")r[SA.PatID]="PATID"+(1300+i);return r;});
+}
+function genPC(){
+return[["TX0300","ZTI","Therm-X HOME Model","E0218","Cold therapy","Cold","Each","450","TRUE"],["TX0101","ZTI","Therm-X Knee Garment, Durable","A9270","Knee garment","Cold","Each","85","TRUE"],["TX0302","ZTI","Therm-X Knee Garment, SPU","A9270","Knee SPU","Cold","Each","45","FALSE"],["CAT-40002","NICE","SQUID GO KNEE FULL UNIT","E0218","Cold","Cold","Each","350","TRUE"],["SA271","ZetrOZ","SAM 2.0","E0218","Ultrasound","SAM","Each","800","TRUE"],["TX0110","ZTI","Therm-X Shoulder Garment, Durable","A9270","Shoulder","Cold","Each","85","TRUE"],["TX0301","ZTI","Therm-X Shoulder Garment, SPU","A9270","Shoulder SPU","Cold","Each","45","FALSE"],["TX0002","NICE","NICE1 Therapy System","E0218","Cold","Cold","Each","300","TRUE"]].map(function(i){var r=new Array(33).fill("");i.forEach(function(x,j){r[j]=x});return r;});
+}
+
+// Components
+function Sel({value,onChange,opts,style}){
+opts=opts||STATUSES;style=style||{};
+return React.createElement("select",{value:value||"",onChange:function(e){onChange(e.target.value)},style:Object.assign({background:cl.pri,color:cl.wh,border:"1px solid "+cl.bd,borderRadius:3,padding:"4px 6px",fontSize:11,cursor:"pointer",fontFamily:"inherit"},style)},[React.createElement("option",{key:"_",value:""},"\u2014")].concat(opts.map(function(s){return React.createElement("option",{key:s,value:s},s)})));
+}
+
+function ProdRow({row,idx,ed,setEd,assets,catalog}){
+var isMobile=window.innerWidth<900;
+var gridCols=isMobile?"2fr 28px 80px 100px":"2fr 32px 100px 160px 90px";
+const pi=P.P1+(idx*4);const name=v(row,pi);if(!name)return null;
+const qty=v(row,pi+1);const status=v(row,pi+2);const sn=v(row,pi+3);
+const k="P"+(idx+1);const[open,setOpen]=useState(false);
+const catRow=catalog.find(function(c){return v(c,PC.Desc)===name});
+const itemCode=catRow?v(catRow,PC.ItemCode):"";
+const isSer=catRow?(v(catRow,PC.Serialized)||"").toUpperCase()==="TRUE":false;
+const avail=useMemo(function(){return(!itemCode||!isSer)?[]:assets.filter(function(a){return v(a,SA.ItemCode)===itemCode&&(v(a,SA.Status)==="Available"||v(a,SA.Status)==="Ready for Cleaning")})},[assets,itemCode,isSer]);
+const curSN=(ed[k+"SN"] !== undefined ? ed[k+"SN"] : sn);const curSt=(ed[k+"S"] !== undefined ? ed[k+"S"] : status);const aSt=plToAsset(curSt);
+
+return React.createElement("div",{style:{display:"grid",gridTemplateColumns:gridCols,gap:4,alignItems:"center",padding:"3px 0",borderBottom:"1px solid #eee",fontSize:isMobile?10:11}},
+React.createElement("div",null,
+React.createElement("span",{style:{fontWeight:500}},name),
+isSer&&React.createElement("span",{style:{fontSize:9,color:cl.dk,marginLeft:4,background:"#e8f0fe",padding:"1px 4px",borderRadius:3}},"SN"),
+itemCode&&React.createElement("span",{style:{fontSize:9,color:"#888",marginLeft:4}},itemCode)
+),
+React.createElement("span",{style:{textAlign:"center"}},qty),
+React.createElement(Sel,{value:curSt,onChange:function(x){setEd(function(p){return Object.assign({},p,{[k+"S"]:x})})},opts:PROD_ST,style:{fontSize:10}}),
+React.createElement("div",{style:{position:"relative"}},
+React.createElement("input",{value:curSN,onChange:function(e){setEd(function(p){return Object.assign({},p,{[k+"SN"]:e.target.value})})},onFocus:function(){if(isSer)setOpen(true)},onBlur:function(){setTimeout(function(){setOpen(false)},200)},style:{border:"1px solid "+cl.bd,borderRadius:3,padding:"3px 5px",fontSize:10,width:"100%",boxSizing:"border-box",fontFamily:"inherit"},placeholder:isSer?"Select or type SN":"N/A",readOnly:!isSer}),
+open&&avail.length>0&&React.createElement("div",{style:{position:"absolute",top:"100%",left:0,right:0,background:cl.wh,border:"1px solid "+cl.bd,borderRadius:4,maxHeight:150,overflowY:"auto",zIndex:100,boxShadow:"0 4px 12px rgba(0,0,0,.2)"}},avail.map(function(a,ai){return React.createElement("div",{key:ai,onMouseDown:function(){setEd(function(p){return Object.assign({},p,{[k+"SN"]:v(a,SA.SN)})});setOpen(false);},style:{padding:"6px 8px",fontSize:10,cursor:"pointer",borderBottom:"1px solid #eee",display:"flex",justifyContent:"space-between"},onMouseEnter:function(e){e.currentTarget.style.background="#f0f4f8"},onMouseLeave:function(e){e.currentTarget.style.background=cl.wh}},React.createElement("span",{style:{fontWeight:600}},"SN: "+v(a,SA.SN)),React.createElement("span",{style:{color:"#666"}},"("+v(a,SA.ItemCode)+" - "+v(a,SA.Status)+")"))})),
+open&&isSer&&avail.length===0&&React.createElement("div",{style:{position:"absolute",top:"100%",left:0,right:0,background:cl.wh,border:"1px solid "+cl.bd,borderRadius:4,padding:"8px",fontSize:10,color:"#999",zIndex:100}},"No available assets for "+itemCode)
+),
+!isMobile&&React.createElement("span",{style:{fontSize:9,color:aSt?"#2e7d32":"#999",fontWeight:500}},aSt||"\u2014")
+);
+}
+
+function Detail({row,idx,onClose,onSave,demo,assets,catalog}){
+const[ed,setEd]=useState({});const[saving,setSaving]=useState(false);
+var isMobile=window.innerWidth<900;
+const prods=[];for(let i=0;i<14;i++)if(v(row,P.P1+i*4))prods.push(i);
+const save=async function(){setSaving(true);await onSave(idx,ed,row);setSaving(false);onClose();};
+const info=[["Provider",v(row,P.Provider)],["Account",v(row,P.Account)],["Acct Mgr",v(row,P.AcctMgr)],["Insurance",v(row,P.InsType)],["Body Part",v(row,P.BodyPart)],["DOS",v(row,P.DOS)],["DOB",v(row,P.DOB)],["Phone",v(row,P.Phone)],["Email",v(row,P.Email)],["Address",v(row,P.Addr)+", "+v(row,P.City)+", "+v(row,P.State)+" "+v(row,P.Zip)],["Rental/Purch",v(row,P.RentalPurch)],["PO Ref",v(row,P.PORef)]];
+
+return React.createElement("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:1000,display:"flex",justifyContent:"center",alignItems:isMobile?"flex-start":"flex-start",paddingTop:isMobile?0:20,overflowY:"auto"}},
+React.createElement("div",{style:{background:cl.lt,borderRadius:isMobile?0:8,width:isMobile?"100%":"96%",maxWidth:1150,maxHeight:isMobile?"100vh":"92vh",height:isMobile?"100vh":"auto",overflowY:"auto",boxShadow:"0 8px 32px rgba(0,0,0,.3)"}},
+React.createElement("div",{style:{background:cl.pri,padding:"10px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",borderRadius:"8px 8px 0 0"}},
+React.createElement("div",{style:{display:"flex",gap:14,alignItems:"center"}},
+React.createElement("span",{style:{color:cl.wh,fontSize:20,fontWeight:700}},v(row,P.PATID)),
+React.createElement("span",{style:{color:cl.wh,fontSize:14}},v(row,P.First)+" "+v(row,P.Last)),
+React.createElement("span",{style:{color:"rgba(255,255,255,.6)",fontSize:11}},"Auth: "+(v(row,P.RptStatus)||"N/A"))
+),
+React.createElement("button",{onClick:onClose,style:{background:"none",border:"none",color:cl.wh,fontSize:22,cursor:"pointer",fontWeight:700}},"\u00d7")
+),
+React.createElement("div",{style:{padding:16}},
+React.createElement("div",{style:{display:"flex",gap:10,alignItems:"center",marginBottom:12,flexWrap:"wrap"}},
+React.createElement("label",{style:{fontWeight:600,fontSize:12}},"Status:"),
+React.createElement(Sel,{value:(ed.Status !== undefined ? ed.Status : v(row,P.Status)),onChange:function(x){setEd(function(p){return Object.assign({},p,{Status:x})})}}),
+React.createElement("label",{style:{fontWeight:600,fontSize:12,marginLeft:10}},"Tracking:"),
+React.createElement("input",{value:(ed.Tracking !== undefined ? ed.Tracking : v(row,P.Tracking)),onChange:function(e){setEd(function(p){return Object.assign({},p,{Tracking:e.target.value})})},style:{border:"1px solid "+cl.bd,borderRadius:3,padding:"4px 8px",fontSize:12,width:130}}),
+React.createElement("label",{style:{fontWeight:600,fontSize:12,marginLeft:10}},"Return Tracking:"),
+React.createElement("input",{value:(ed.RetTracking !== undefined ? ed.RetTracking : v(row,P.RetTracking)),onChange:function(e){setEd(function(p){return Object.assign({},p,{RetTracking:e.target.value})})},style:{border:"1px solid "+cl.bd,borderRadius:3,padding:"4px 8px",fontSize:12,width:130}})
+),
+React.createElement("div",{style:{display:"grid",gridTemplateColumns:"3fr 2fr",gap:12}},
+React.createElement("div",{style:{background:cl.wh,borderRadius:6,padding:isMobile?6:10}},
+React.createElement("div",{style:{display:"grid",gridTemplateColumns:isMobile?"2fr 28px 80px 100px":"2fr 32px 100px 160px 90px",gap:4,marginBottom:4,fontSize:9,fontWeight:700,color:cl.dk}},
+React.createElement("span",null,"Product"),React.createElement("span",{style:{textAlign:"center"}},"Qty"),React.createElement("span",null,"PL Status"),React.createElement("span",null,"Serial #"),!isMobile&&React.createElement("span",null,"Asset Status")
+),
+prods.map(function(i){return React.createElement(ProdRow,{key:i,row:row,idx:i,ed:ed,setEd:setEd,assets:assets,catalog:catalog})}),
+React.createElement("div",{style:{marginTop:8,padding:6,background:"#f5f7f8",borderRadius:4,fontSize:10,color:"#555"}},
+React.createElement("strong",null,"Asset sync: "),"Saving updates SerializedAssets for assigned SNs. Equipment Returned triggers Restock for serialized items."
+)
+),
+React.createElement("div",{style:{background:cl.wh,borderRadius:6,padding:10,fontSize:11}},
+React.createElement("div",{style:{fontWeight:700,marginBottom:6,color:cl.dk}},"Patient Information"),
+React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:3}},
+info.map(function(pair){return React.createElement("div",{key:pair[0],style:{padding:"1px 0"}},React.createElement("span",{style:{color:"#666",fontSize:9}},pair[0]+": "),React.createElement("span",{style:{fontWeight:500}},pair[1]||"\u2014"))})
+)
+)
+),
+React.createElement("div",{style:{display:"flex",gap:10,marginTop:14,justifyContent:"flex-end"}},
+React.createElement("button",{onClick:onClose,style:{background:cl.acc,color:cl.wh,border:"none",borderRadius:4,padding:"10px 22px",fontSize:13,cursor:"pointer"}},"Cancel"),
+React.createElement("button",{onClick:save,disabled:saving,style:{background:cl.dk,color:cl.wh,border:"none",borderRadius:4,padding:"10px 22px",fontSize:13,fontWeight:600,cursor:"pointer",opacity:saving?0.6:1}},saving?"Saving\u2026":"Update ALL")
+),
+demo&&React.createElement("p",{style:{fontSize:9,color:"#666",marginTop:6,textAlign:"right"}},"Demo mode \u2014 asset sync simulated locally.")
+)
+)
+);
+}
+
+function PLTasks({data,isDemo,onSave,assets,catalog}){
+const[flt,setFlt]=useState("");const[srch,setSrch]=useState("");
+const[stFlt,setStFlt]=useState("");const[sel,setSel]=useState(null);
+const[detail,setDetail]=useState(false);
+const[showTasks,setShowTasks]=useState(true);
+var isMobile=window.innerWidth<900;
+
+const af=FILTERS.find(function(f){return f.key===flt});
+const filtered=data.filter(function(r){if(af&&!af.fn(r))return false;if(stFlt&&v(r,P.Status)!==stFlt)return false;if(srch){const q=srch.toUpperCase();if(!(v(r,P.PATID)||"").toUpperCase().startsWith(q)&&!(v(r,P.First)||"").toUpperCase().startsWith(q)&&!(v(r,P.Last)||"").toUpperCase().startsWith(q))return false;}return true;}).sort(function(a,b){return(parseInt((v(b,P.PATID)||"").replace(/\D/g,""))||0)-(parseInt((v(a,P.PATID)||"").replace(/\D/g,""))||0)});
+const cts={};FILTERS.forEach(function(f){cts[f.key]=data.filter(f.fn).length;});
+
+return React.createElement("div",{style:{display:"flex",flexDirection:isMobile?"column":"row",flex:1,overflow:"hidden"}},
+React.createElement("div",{style:{width:isMobile?"100%":540,padding:10,display:"flex",flexDirection:"column",gap:6,overflowY:isMobile?"visible":"auto",flexShrink:0,maxHeight:isMobile?(showTasks?"none":"0px"):"none",overflow:isMobile?(showTasks?"visible":"hidden"):"auto"}},
+isMobile&&React.createElement("button",{onClick:function(){setShowTasks(function(p){return !p});},style:{background:cl.pri,color:cl.wh,border:"none",borderRadius:4,padding:"8px",fontSize:12,cursor:"pointer",fontFamily:"inherit",marginBottom:4}},showTasks?"Hide Tasks \u25b2":"Show Tasks \u25bc ("+FILTERS.reduce(function(s,f){return s+cts[f.key]},0)+" total)"),
+(!isMobile||showTasks)&&React.createElement("div",{style:{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr 1fr 1fr",gap:5}},
+FILTERS.map(function(f){var cnt=cts[f.key];var on=flt===f.key;return React.createElement("button",{key:f.key,onClick:function(){setFlt(function(p){return p===f.key?"":f.key});},style:{background:on?cl.dk:cnt>0?"#c0392b":cl.pri,color:cl.wh,border:"none",borderRadius:3,padding:"8px 6px",fontSize:11,fontWeight:on?700:400,cursor:"pointer",textAlign:"center",fontFamily:"inherit",lineHeight:1.2,minHeight:52}},React.createElement("div",null,f.label),React.createElement("div",{style:{fontSize:16,fontWeight:700,marginTop:2}},cnt));})
+),
+React.createElement("div",{style:{display:"flex",gap:5,marginTop:2}},
+React.createElement("button",{onClick:function(){setFlt("");setSrch("");setStFlt("");},style:{flex:1,background:cl.acc,color:cl.wh,border:"none",borderRadius:4,padding:"6px",fontSize:11,cursor:"pointer"}},"Clear Filters")
+),
+React.createElement("div",{style:{fontSize:10,color:"#666",marginTop:4}},React.createElement("b",null,data.length)," total | ",React.createElement("b",null,filtered.length)," showing"),
+React.createElement("div",{style:{padding:8,background:"rgba(255,255,255,.5)",borderRadius:6,fontSize:10,marginTop:4}},
+React.createElement("div",{style:{fontWeight:700,color:cl.dk,marginBottom:4}},"Asset Inventory"),
+React.createElement("div",{style:{display:"flex",gap:12}},
+React.createElement("span",null,"Available: ",React.createElement("b",{style:{color:"#2e7d32"}},assets.filter(function(a){return v(a,SA.Status)==="Available"}).length)),
+React.createElement("span",null,"With Patient: ",React.createElement("b",null,assets.filter(function(a){return v(a,SA.Status)==="With Patient"}).length)),
+React.createElement("span",null,"Cleaning: ",React.createElement("b",{style:{color:"#e65100"}},assets.filter(function(a){return v(a,SA.Status)==="Ready for Cleaning"}).length))
+)
+)
+),
+React.createElement("div",{style:{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}},
+React.createElement("div",{style:{display:"flex",gap:6,padding:"8px 10px",background:"rgba(255,255,255,.3)"}},
+React.createElement("input",{value:srch,onChange:function(e){setSrch(e.target.value)},placeholder:"Search PATID, First, or Last\u2026",style:{flex:1,background:cl.pri,color:cl.wh,border:"1px solid "+cl.bd,borderRadius:4,padding:"9px 12px",fontSize:13,fontWeight:600,fontFamily:"inherit"}}),
+React.createElement("select",{value:stFlt,onChange:function(e){setStFlt(e.target.value)},style:{background:cl.pri,color:cl.wh,border:"1px solid "+cl.bd,borderRadius:4,padding:"7px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}},[React.createElement("option",{key:"_",value:""},"(All)")].concat(STATUSES.map(function(s){return React.createElement("option",{key:s},s)})))
+),
+React.createElement("div",{style:{flex:1,overflowY:"auto",background:cl.wh}},
+filtered.length===0?React.createElement("div",{style:{padding:40,textAlign:"center",color:"#999"}},"No patients match"):
+filtered.map(function(row){var oi=data.indexOf(row);return React.createElement("div",{key:oi,onClick:function(){setSel(oi);setDetail(true);},style:{padding:"9px 12px",borderBottom:"5px solid rgba(74,102,112,.85)",cursor:"pointer",borderLeft:sel===oi?"4px solid "+cl.pri:"4px solid transparent",background:sel===oi?"rgba(74,102,112,.08)":cl.wh}},
+React.createElement("div",{style:{fontSize:14,fontWeight:sel===oi?700:400,color:cl.tx}},v(row,P.PATID)+" | "+v(row,P.First)+" "+v(row,P.Last)+" | "+v(row,P.Status)),
+React.createElement("div",{style:{fontSize:10,color:"#555",marginTop:2}},v(row,P.BodyPart)+" DoS: "+(v(row,P.DOS)||"N/A")+" | "+v(row,P.InsType)+" | "+v(row,P.RefPartner)+" (AM: "+v(row,P.AcctMgr)+")"),
+React.createElement("div",{style:{fontSize:10,fontStyle:"italic",color:"#777",marginTop:1}},"Provider: "+v(row,P.Provider)+" | "+v(row,P.Account))
+);})
+)
+),
+detail&&sel!==null&&data[sel]&&React.createElement(Detail,{row:data[sel],idx:sel,onClose:function(){setDetail(false)},onSave:onSave,demo:isDemo,assets:assets,catalog:catalog})
+);
+}
+
+function Stub({title,desc,tables,features}){
+return React.createElement("div",{style:{flex:1,display:"flex",justifyContent:"center",alignItems:"center",background:cl.bg}},
+React.createElement("div",{style:{background:cl.wh,borderRadius:12,padding:32,maxWidth:550,boxShadow:"0 4px 20px rgba(0,0,0,.1)",textAlign:"center"}},
+React.createElement("h2",{style:{margin:"0 0 6px",color:cl.dk}},title),
+React.createElement("p",{style:{color:"#666",fontSize:13,marginBottom:12}},desc),
+React.createElement("div",{style:{textAlign:"left",background:"#f5f7f8",borderRadius:6,padding:12,marginBottom:8}},
+React.createElement("div",{style:{fontSize:10,fontWeight:700,color:cl.dk,marginBottom:4}},"TABLES:"),
+tables.map(function(t){return React.createElement("div",{key:t,style:{fontSize:11,color:"#555"}},"\u2022 "+t)})
+),
+React.createElement("div",{style:{textAlign:"left",background:"#f5f7f8",borderRadius:6,padding:12}},
+React.createElement("div",{style:{fontSize:10,fontWeight:700,color:cl.dk,marginBottom:4}},"FEATURES:"),
+features.map(function(f){return React.createElement("div",{key:f,style:{fontSize:11,color:"#555"}},"\u2022 "+f)})
+)
+)
+);
+}
+
+const NAV=[{key:"pl",label:"Patient Log",icon:"\ud83d\udccb"},{key:"aa",label:"AA Report",icon:"\ud83c\udfc8"},{key:"wcar",label:"WC AR",icon:"\ud83d\udcca"},{key:"po",label:"Purchasing",icon:"\ud83d\uded2"},{key:"wh",label:"Warehouse",icon:"\ud83c\udfed"},{key:"order",label:"New Order",icon:"\u2795"}];
+
+function App(){
+const[plData,setPlData]=useState([]);const[saData,setSaData]=useState([]);
+const[pcData,setPcData]=useState([]);const[inData,setInData]=useState([]);
+const[loading,setLoading]=useState(true);const[isDemo,setIsDemo]=useState(true);
+const[token,setToken]=useState(null);const[user,setUser]=useState("");
+const[error,setError]=useState("");const[page,setPage]=useState("pl");
+
+useEffect(function(){setPlData(genPL());setSaData(genSA());setPcData(genPC());setInData([]);setLoading(false);},[]);
+useEffect(function(){var h=window.location.hash;if(h.includes("access_token=")){var t=h.split("access_token=")[1].split("&")[0];setToken(t);window.location.hash="";loadAll(t);}},[]);
+
+const gf=useCallback(async function(url,tk,opts){
+opts=opts||{};
+var r=await fetch("https://graph.microsoft.com/v1.0"+url,Object.assign({headers:{"Authorization":"Bearer "+tk,"Content-Type":"application/json"}},opts));
+if(!r.ok)throw new Error(r.status+": "+(await r.text()).slice(0,200));return r.json();
+},[]);
+
+const loadAll=useCallback(async function(tk){
+setLoading(true);setError("");
+try{
+var me=await gf("/me",tk);setUser(me.displayName||me.userPrincipalName);
+var base="/drives/"+CFG.driveId+"/items/"+CFG.itemId+"/workbook/tables";
+var results=await Promise.all([gf(base+"/PatientLog/rows",tk),gf(base+"/SerializedAssets/rows",tk),gf(base+"/ProductCatalog/rows",tk)]);
+setPlData(results[0].value.map(function(r){return r.values[0]}));setSaData(results[1].value.map(function(r){return r.values[0]}));setPcData(results[2].value.map(function(r){return r.values[0]}));setIsDemo(false);
+}catch(e){setError("Load: "+e.message);}
+setLoading(false);
+},[gf]);
+
+const handleSave=useCallback(async function(idx,edits,row){
+var newPL=plData[idx].slice();
+if(edits.Status)newPL[P.Status]=edits.Status;
+if(edits.Tracking!==undefined)newPL[P.Tracking]=edits.Tracking;
+if(edits.RetTracking!==undefined)newPL[P.RetTracking]=edits.RetTracking;
+for(var i=1;i<=14;i++){if(edits["P"+i+"S"])newPL[P.P1+((i-1)*4)+2]=edits["P"+i+"S"];if(edits["P"+i+"SN"]!==undefined)newPL[P.P1+((i-1)*4)+3]=edits["P"+i+"SN"];}
+var assetUpd=[];var intakeAdd=[];var today=new Date().toLocaleDateString("en-US");var patid=v(row,P.PATID);
+for(var i=0;i<14;i++){var pi=P.P1+(i*4);var nm=v(row,pi);if(!nm)continue;var k="P"+(i+1);var sn=(edits[k+"SN"] !== undefined ? edits[k+"SN"] : v(row,pi+3));var plSt=(edits[k+"S"] !== undefined ? edits[k+"S"] : v(row,pi+2));if(!sn)continue;
+var cat=pcData.find(function(c){return v(c,PC.Desc)===nm});var isSer=cat&&(v(cat,PC.Serialized)||"").toUpperCase()==="TRUE";if(!isSer)continue;
+var aSt=plToAsset(plSt);if(!aSt)continue;
+var ai=saData.findIndex(function(a){return v(a,SA.SN)===sn.replace("'","")});if(ai>=0)assetUpd.push({idx:ai,status:aSt,patid:patid,date:today});
+if(plSt==="Equipment Returned"&&cat)intakeAdd.push(["Restock","",v(cat,PC.ItemCode),v(cat,PC.Mfr),nm,"1",sn.replace("'",""),v(row,P.AcctMgr)||"",today]);
+}
+if(isDemo){setPlData(function(p){var c=p.slice();c[idx]=newPL;return c;});if(assetUpd.length)setSaData(function(p){var c=p.map(function(r){return r.slice()});assetUpd.forEach(function(u){c[u.idx][SA.Status]=u.status;c[u.idx][SA.PatID]=u.patid;c[u.idx][SA.StatusDate]=u.date;});return c;});if(intakeAdd.length)setInData(function(p){return p.concat(intakeAdd)});return;}
+try{var base="/drives/"+CFG.driveId+"/items/"+CFG.itemId+"/workbook/tables";
+await gf(base+"/PatientLog/rows/itemAt(index="+idx+")",token,{method:"PATCH",body:JSON.stringify({values:[newPL]})});setPlData(function(p){var c=p.slice();c[idx]=newPL;return c;});
+for(var u of assetUpd){var nA=saData[u.idx].slice();nA[SA.Status]=u.status;nA[SA.PatID]=u.patid;nA[SA.StatusDate]=u.date;await gf(base+"/SerializedAssets/rows/itemAt(index="+u.idx+")",token,{method:"PATCH",body:JSON.stringify({values:[nA]})});setSaData(function(p){var c=p.slice();c[u.idx]=nA;return c;});}
+for(var e of intakeAdd){await gf(base+"/Intake_Returns/rows/add",token,{method:"POST",body:JSON.stringify({values:[e]})});setInData(function(p){return p.concat([e])});}
+}catch(e){setError("Save: "+e.message);}
+},[isDemo,plData,saData,pcData,token,gf]);
+
+const login=function(){window.location.href="https://login.microsoftonline.com/"+CFG.tenantId+"/oauth2/v2.0/authorize?client_id="+CFG.clientId+"&response_type=token&redirect_uri="+encodeURIComponent(CFG.redirectUri)+"&scope="+encodeURIComponent(CFG.scopes.join(" "))+"&response_mode=fragment&prompt=consent";};
+
+if(loading)return React.createElement("div",{style:{display:"flex",justifyContent:"center",alignItems:"center",height:"100%",background:cl.bg}},React.createElement("div",{style:{textAlign:"center"}},React.createElement("div",{style:{width:40,height:40,border:"4px solid "+cl.pri,borderTopColor:"transparent",borderRadius:"50%",animation:"spin 1s linear infinite",margin:"0 auto"}}),React.createElement("p",{style:{marginTop:12,color:cl.pri}},"Loading Otto\u2026")));
+
+return React.createElement("div",{style:{fontFamily:"'Open Sans',sans-serif",background:cl.bg,height:"100%",display:"flex",flexDirection:"column"}},
+React.createElement("div",{style:{background:"linear-gradient(135deg,"+cl.dk+","+cl.pri+")",padding:"5px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}},
+React.createElement("div",{style:{display:"flex",alignItems:"center",gap:14}},
+React.createElement("span",{style:{color:cl.wh,fontSize:22,fontWeight:700,letterSpacing:1,cursor:"pointer"},onClick:function(){setPage("pl")}},"OTTO"),
+React.createElement("span",{style:{color:"rgba(255,255,255,.45)",fontSize:10}},"NEMS"),
+React.createElement("div",{style:{display:"flex",gap:2,marginLeft:12}},NAV.map(function(n){return React.createElement("button",{key:n.key,onClick:function(){setPage(n.key)},style:{background:page===n.key?"rgba(255,255,255,.2)":"transparent",color:cl.wh,border:"none",borderRadius:4,padding:"5px 9px",fontSize:11,cursor:"pointer",fontFamily:"inherit"}},n.icon+" "+n.label)}))
+),
+React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},
+isDemo&&React.createElement("span",{style:{background:"#e74c3c",color:cl.wh,fontSize:10,padding:"2px 8px",borderRadius:10,fontWeight:600}},"DEMO"),
+user&&React.createElement("span",{style:{color:cl.wh,fontSize:11}},user),
+isDemo?React.createElement("button",{onClick:login,style:{background:cl.wh,color:cl.dk,border:"none",borderRadius:4,padding:"5px 12px",fontSize:11,fontWeight:600,cursor:"pointer"}},"Connect to Excel"):React.createElement("button",{onClick:function(){loadAll(token)},style:{background:"rgba(255,255,255,.2)",color:cl.wh,border:"none",borderRadius:4,padding:"5px 12px",fontSize:11,cursor:"pointer"}},"Refresh")
+)
+),
+error&&React.createElement("div",{style:{background:"#e74c3c",color:cl.wh,padding:"5px 14px",fontSize:12}},error,React.createElement("button",{onClick:function(){setError("")},style:{float:"right",background:"none",border:"none",color:cl.wh,cursor:"pointer"}},"\u00d7")),
+React.createElement("div",{style:{flex:1,display:"flex",overflow:"hidden"}},
+page==="pl"&&React.createElement(PLTasks,{data:plData,isDemo:isDemo,onSave:handleSave,assets:saData,catalog:pcData}),
+page==="aa"&&React.createElement(Stub,{title:"Athletic Accident Report",desc:"Benefits verification, credentialling, eligibility.",tables:["AAReport","AAARReport"],features:["Benefits Verification + email","Credentialling Needed","Additional Info","Eligibility Check"]}),
+page==="wcar"&&React.createElement(Stub,{title:"WC AR Report",desc:"Workers' comp claim followup.",tables:["WCARReport","WorkCompARReport"],features:["Claim Followup Needed","HCPCS line items","Send Followup Email","Status Date update"]}),
+page==="po"&&React.createElement(Stub,{title:"Purchasing",desc:"PO creation, editing, approval.",tables:["Purchasing","ProductCatalog"],features:["Browse/search POs","Create/Edit PO","PO Approval","Draft to POShell"]}),
+page==="wh"&&React.createElement(Stub,{title:"Warehouse",desc:"Serialized asset tracking.",tables:["SerializedAssets"],features:["Browse/search assets","Edit status/cleaning","Create new asset","Intake management"]}),
+page==="order"&&React.createElement(Stub,{title:"New Order",desc:"Multi-step order entry.",tables:["PatientLog","ProductCatalog","ProviderPreferences"],features:["Provider + Insurance select","Patient demographics","Insurance-specific fields","Product selection 1-14","Auto PATID","Submit to Excel"]})
+)
+);
+}
+
+ReactDOM.render(React.createElement(App),document.getElementById("root"));
+</script>
+
+</body>
+</html>
