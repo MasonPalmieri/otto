@@ -142,7 +142,23 @@ const[ed,setEd]=useState({});const[saving,setSaving]=useState(false);
 var isMobile=window.innerWidth<900;
 const prods=[];for(let i=0;i<14;i++)if(v(row,P.P1+i*4))prods.push(i);
 const save=async function(){setSaving(true);await onSave(idx,ed,row);setSaving(false);onClose();};
-const info=[["Provider",v(row,P.Provider)],["Account",v(row,P.Account)],["Acct Mgr",v(row,P.AcctMgr)],["Insurance",v(row,P.InsType)],["Body Part",v(row,P.BodyPart)],["DOS",v(row,P.DOS)],["DOB",v(row,P.DOB)],["Phone",v(row,P.Phone)],["Email",v(row,P.Email)],["Address",v(row,P.Addr)+", "+v(row,P.City)+", "+v(row,P.State)+" "+v(row,P.Zip)],["Rental/Purch",v(row,P.RentalPurch)],["PO Ref",v(row,P.PORef)]];
+const info=[["Provider",v(row,P.Provider)],["Account",v(row,P.Account)],["Acct Mgr",v(row,P.AcctMgr)],["Insurance",v(row,P.InsType)],["Body Part",v(row,P.BodyPart)],["DOB",v(row,P.DOB)],["Phone",v(row,P.Phone)],["Email",v(row,P.Email)],["Address",v(row,P.Addr)+", "+v(row,P.City)+", "+v(row,P.State)+" "+v(row,P.Zip)],["Rental/Purch",v(row,P.RentalPurch)]];
+// Detect active tasks
+var tasks=[];FILTERS.forEach(function(f){if(f.fn(row))tasks.push(f.key)});
+// Helpers for editable fields
+function gv(key,col){return ed[key]!==undefined?ed[key]:v(row,col)}
+function sv(key,val){setEd(function(p){return Object.assign({},p,{[key]:val})})}
+var lbl={fontWeight:600,fontSize:10,color:"#555"};
+var inp={border:"1px solid "+cl.bd,borderRadius:3,padding:"3px 6px",fontSize:11,fontFamily:"inherit",width:"100%",boxSizing:"border-box"};
+var tgl=function(key,col,label){var cur=gv(key,col);var on=cur==="Yes";return React.createElement("div",{style:{display:"flex",alignItems:"center",gap:6}},
+React.createElement("span",{style:lbl},label),
+React.createElement("button",{onClick:function(){sv(key,on?"":"Yes")},style:{background:on?"#2e7d32":cl.pri,color:cl.wh,border:"none",borderRadius:3,padding:"3px 10px",fontSize:10,cursor:"pointer",fontFamily:"inherit",minWidth:40}},on?"Yes":"No")
+)};
+// Quick action helpers
+function schedFitting(){setEd(function(p){return Object.assign({},p,{Status:"Fitting Scheduled",BookDel:"Yes"})})}
+function schedPickup(){setEd(function(p){return Object.assign({},p,{Status:"Pickup Scheduled",BookRet:"Yes"})})}
+function markShipped(){setEd(function(p){return Object.assign({},p,{Status:"Shipped"})})}
+function markRetShipped(){setEd(function(p){return Object.assign({},p,{Status:"Return Shipped"})})}
 
 return React.createElement("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:1000,display:"flex",justifyContent:"center",alignItems:isMobile?"flex-start":"flex-start",paddingTop:isMobile?0:20,overflowY:"auto"}},
 React.createElement("div",{style:{background:cl.lt,borderRadius:isMobile?0:8,width:isMobile?"100%":"96%",maxWidth:1150,maxHeight:isMobile?"100vh":"92vh",height:isMobile?"100vh":"auto",overflowY:"auto",boxShadow:"0 8px 32px rgba(0,0,0,.3)"}},
@@ -150,12 +166,14 @@ React.createElement("div",{style:{background:cl.pri,padding:"10px 20px",display:
 React.createElement("div",{style:{display:"flex",gap:14,alignItems:"center"}},
 React.createElement("span",{style:{color:cl.wh,fontSize:20,fontWeight:700}},v(row,P.PATID)),
 React.createElement("span",{style:{color:cl.wh,fontSize:14}},v(row,P.First)+" "+v(row,P.Last)),
-React.createElement("span",{style:{color:"rgba(255,255,255,.6)",fontSize:11}},"Auth: "+(v(row,P.RptStatus)||"N/A"))
+React.createElement("span",{style:{color:"rgba(255,255,255,.6)",fontSize:11}},"Auth: "+(v(row,P.RptStatus)||"N/A")),
+tasks.length>0&&React.createElement("span",{style:{background:"#c0392b",color:cl.wh,fontSize:9,padding:"2px 6px",borderRadius:8,fontWeight:600}},tasks.length+" task"+(tasks.length>1?"s":""))
 ),
 React.createElement("button",{onClick:onClose,style:{background:"none",border:"none",color:cl.wh,fontSize:22,cursor:"pointer",fontWeight:700}},"\u00d7")
 ),
 React.createElement("div",{style:{padding:16}},
-React.createElement("div",{style:{display:"flex",gap:10,alignItems:"center",marginBottom:12,flexWrap:"wrap"}},
+// Row 1: Status + Tracking
+React.createElement("div",{style:{display:"flex",gap:10,alignItems:"center",marginBottom:10,flexWrap:"wrap"}},
 React.createElement("label",{style:{fontWeight:600,fontSize:12}},"Status:"),
 React.createElement(Sel,{value:(ed.Status !== undefined ? ed.Status : v(row,P.Status)),onChange:function(x){setEd(function(p){return Object.assign({},p,{Status:x})})}}),
 React.createElement("label",{style:{fontWeight:600,fontSize:12,marginLeft:10}},"Tracking:"),
@@ -163,6 +181,61 @@ React.createElement("input",{value:(ed.Tracking !== undefined ? ed.Tracking : v(
 React.createElement("label",{style:{fontWeight:600,fontSize:12,marginLeft:10}},"Return Tracking:"),
 React.createElement("input",{value:(ed.RetTracking !== undefined ? ed.RetTracking : v(row,P.RetTracking)),onChange:function(e){setEd(function(p){return Object.assign({},p,{RetTracking:e.target.value})})},style:{border:"1px solid "+cl.bd,borderRadius:3,padding:"4px 8px",fontSize:12,width:130}})
 ),
+// Task Actions Section
+React.createElement("div",{style:{background:cl.wh,borderRadius:6,padding:10,marginBottom:12}},
+React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
+React.createElement("span",{style:{fontWeight:700,fontSize:11,color:cl.dk}},"Task Actions"),
+tasks.length>0&&React.createElement("div",{style:{display:"flex",gap:4,flexWrap:"wrap"}},
+(tasks.indexOf("FitNeed")>=0||tasks.indexOf("UrgOrd")>=0)&&React.createElement("button",{onClick:schedFitting,style:{background:"#2e7d32",color:cl.wh,border:"none",borderRadius:3,padding:"3px 8px",fontSize:9,cursor:"pointer",fontFamily:"inherit"}},"Schedule Fitting"),
+tasks.indexOf("PickNeed")>=0&&React.createElement("button",{onClick:schedPickup,style:{background:"#2e7d32",color:cl.wh,border:"none",borderRadius:3,padding:"3px 8px",fontSize:9,cursor:"pointer",fontFamily:"inherit"}},"Schedule Pickup"),
+tasks.indexOf("FulNeed")>=0&&React.createElement("button",{onClick:markShipped,style:{background:"#1565c0",color:cl.wh,border:"none",borderRadius:3,padding:"3px 8px",fontSize:9,cursor:"pointer",fontFamily:"inherit"}},"Mark Shipped"),
+tasks.indexOf("RetNeed")>=0&&React.createElement("button",{onClick:markRetShipped,style:{background:"#e65100",color:cl.wh,border:"none",borderRadius:3,padding:"3px 8px",fontSize:9,cursor:"pointer",fontFamily:"inherit"}},"Mark Return Shipped")
+)
+),
+React.createElement("div",{style:{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr 1fr 1fr",gap:8,fontSize:11}},
+// Fitting fields
+React.createElement("div",null,
+React.createElement("div",{style:lbl},"Fitting Date"),
+React.createElement("input",{type:"date",value:gv("FitDate",P.FitDate),onChange:function(e){sv("FitDate",e.target.value)},style:inp})
+),
+tgl("BookDel",P.BookDel,"Book Delivery"),
+// Pickup fields
+React.createElement("div",null,
+React.createElement("div",{style:lbl},"Pickup/Return Date"),
+React.createElement("input",{type:"date",value:gv("PickRetDate",P.PickRetDate),onChange:function(e){sv("PickRetDate",e.target.value)},style:inp})
+),
+tgl("BookRet",P.BookRet,"Book Return"),
+// Courtesy Call
+tgl("CourtCall",P.CourtCall,"Courtesy Call"),
+// DOS
+React.createElement("div",null,
+React.createElement("div",{style:lbl},"Surgery Date (DOS)"),
+React.createElement("input",{type:"date",value:gv("DOS",P.DOS),onChange:function(e){sv("DOS",e.target.value)},style:inp})
+),
+// PO Reference
+React.createElement("div",null,
+React.createElement("div",{style:lbl},"PO Reference"),
+React.createElement("input",{value:gv("PORef",P.PORef),onChange:function(e){sv("PORef",e.target.value)},style:inp,placeholder:"PO #"})
+),
+// Feedback Form
+React.createElement("div",null,
+React.createElement("div",{style:lbl},"Feedback Form"),
+React.createElement("input",{value:gv("FeedForm",P.FeedForm),onChange:function(e){sv("FeedForm",e.target.value)},style:inp,placeholder:"Form link/ID"})
+)
+),
+// Ext Confirmation + Svc Update row
+(v(row,P.ExtConf)||v(row,P.SvcUpd)==="Yes")&&React.createElement("div",{style:{display:"flex",gap:12,marginTop:8,paddingTop:8,borderTop:"1px solid #eee",fontSize:10}},
+v(row,P.ExtConf)&&React.createElement("div",{style:{flex:1}},
+React.createElement("span",{style:{fontWeight:600,color:"#555"}},"Ext Confirmation: "),
+React.createElement("span",{style:{color:cl.dk}},v(row,P.ExtConf))
+),
+v(row,P.SvcUpd)==="Yes"&&React.createElement("div",null,
+React.createElement("span",{style:{fontWeight:600,color:"#555"}},"Status Update Needed "),
+React.createElement("button",{onClick:function(){sv("SvcUpd","")},style:{background:"#2e7d32",color:cl.wh,border:"none",borderRadius:3,padding:"2px 8px",fontSize:9,cursor:"pointer",fontFamily:"inherit"}},"Clear Flag")
+)
+)
+),
+// Products + Patient Info grid
 React.createElement("div",{style:{display:"grid",gridTemplateColumns:"3fr 2fr",gap:12}},
 React.createElement("div",{style:{background:cl.wh,borderRadius:6,padding:isMobile?6:10}},
 React.createElement("div",{style:{display:"grid",gridTemplateColumns:isMobile?"2fr 28px 80px 100px":"2fr 32px 100px 160px 90px",gap:4,marginBottom:4,fontSize:9,fontWeight:700,color:cl.dk}},
@@ -289,6 +362,15 @@ var newPL=plData[idx].slice();
 if(edits.Status)newPL[P.Status]=edits.Status;
 if(edits.Tracking!==undefined)newPL[P.Tracking]=edits.Tracking;
 if(edits.RetTracking!==undefined)newPL[P.RetTracking]=edits.RetTracking;
+if(edits.BookDel!==undefined)newPL[P.BookDel]=edits.BookDel;
+if(edits.FitDate!==undefined)newPL[P.FitDate]=edits.FitDate;
+if(edits.BookRet!==undefined)newPL[P.BookRet]=edits.BookRet;
+if(edits.PickRetDate!==undefined)newPL[P.PickRetDate]=edits.PickRetDate;
+if(edits.CourtCall!==undefined)newPL[P.CourtCall]=edits.CourtCall;
+if(edits.DOS!==undefined)newPL[P.DOS]=edits.DOS;
+if(edits.PORef!==undefined)newPL[P.PORef]=edits.PORef;
+if(edits.FeedForm!==undefined)newPL[P.FeedForm]=edits.FeedForm;
+if(edits.SvcUpd!==undefined)newPL[P.SvcUpd]=edits.SvcUpd;
 for(var i=1;i<=14;i++){if(edits["P"+i+"S"])newPL[P.P1+((i-1)*4)+2]=edits["P"+i+"S"];if(edits["P"+i+"SN"]!==undefined)newPL[P.P1+((i-1)*4)+3]=edits["P"+i+"SN"];}
 var assetUpd=[];var intakeAdd=[];var today=new Date().toLocaleDateString("en-US");var patid=v(row,P.PATID);
 for(var i=0;i<14;i++){var pi=P.P1+(i*4);var nm=v(row,pi);if(!nm)continue;var k="P"+(i+1);var sn=(edits[k+"SN"] !== undefined ? edits[k+"SN"] : v(row,pi+3));var plSt=(edits[k+"S"] !== undefined ? edits[k+"S"] : v(row,pi+2));if(!sn)continue;
