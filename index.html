@@ -137,8 +137,8 @@ open&&isSer&&avail.length===0&&React.createElement("div",{style:{position:"absol
 );
 }
 
-function Detail({row,idx,onClose,onSave,demo,assets,catalog}){
-const[ed,setEd]=useState({});const[saving,setSaving]=useState(false);
+function Detail({row,idx,onClose,onSave,demo,assets,catalog,filter}){
+const[ed,setEd]=useState({});const[saving,setSaving]=useState(false);const[showMsg,setShowMsg]=useState(false);const[preAuth,setPreAuth]=useState(false);
 var isMobile=window.innerWidth<900;
 const prods=[];for(let i=0;i<14;i++)if(v(row,P.P1+i*4))prods.push(i);
 const save=async function(){setSaving(true);await onSave(idx,ed,row);setSaving(false);onClose();};
@@ -159,6 +159,31 @@ function schedFitting(){setEd(function(p){return Object.assign({},p,{Status:"Fit
 function schedPickup(){setEd(function(p){return Object.assign({},p,{Status:"Pickup Scheduled",BookRet:"Yes"})})}
 function markShipped(){setEd(function(p){return Object.assign({},p,{Status:"Shipped"})})}
 function markRetShipped(){setEd(function(p){return Object.assign({},p,{Status:"Return Shipped"})})}
+// Filter-conditional field visibility
+var fieldMap={FitNeed:["FitDate","BookDel"],UrgOrd:["FitDate","BookDel"],PickNeed:["PickRetDate","BookRet"],Court:["CourtCall"],SxPost:["DOS"],DropNeed:["PORef"],Feed:["FeedForm"],Ext:["ExtConf"],SvcUpd:["SvcUpd"],FulNeed:["Tracking"],RetNeed:["RetTracking"],RptEntry:[]};
+function sf(fkey){if(!filter)return true;var fields=fieldMap[filter]||[];return fields.indexOf(fkey)>=0;}
+// Draft message generator
+function draftMessage(){
+var provLast=(v(row,P.Provider)||"").split(",")[0].trim();
+var p1=v(row,P.P1)||"";var first=v(row,P.First)||"";var insType=v(row,P.InsType)||"";
+var bodyPart=v(row,P.BodyPart)||"";var dos=v(row,P.DOS)||"";
+var addr=v(row,P.Addr)||"";var city=v(row,P.City)||"";var state=v(row,P.State)||"";var zip=v(row,P.Zip)||"";
+var zipFmt=/^\d+$/.test(zip)?zip.padStart(5,"0"):zip;
+var account=v(row,P.Account)||"";var fulType=v(row,P.FulfType)||"";
+var deviceName=p1.indexOf("Therm-X")>=0?"Therm-X":p1.indexOf("SAM 2.0")>=0?"SAM 2.0":p1;
+if(preAuth){
+var deviceDesc="";
+if(p1.indexOf("Therm-X")>=0||p1==="NICE1 Therapy System")deviceDesc="The "+p1+" provides cold and compression therapy to the area to help with pain, swelling, and inflammation. The device cools itself, so there is no need to add ice.\n\n";
+else if(p1==="SAM 2.0")deviceDesc="The SAM 2.0 stands for Sustained Acoustic Medicine. The device sends ultrasound-like sound waves into the body while worn and is clinically proven to help patients recover from chronic pain and arthritis.\n\n";
+return "Hi "+first+"!\n\nThis is New England Medical Solutions. We work with Dr. "+provLast+"'s office to provide patients the "+p1+" to help with their recovery.\n\n"+deviceDesc+"We just received the order from the office and the device is covered through Worker's Compensation. However, we must obtain authorization from your adjuster before we can deliver the device.\n\nAs soon as we receive authorization, I will reach out to coordinate delivery with you.\n\nIf you have any questions in the meantime, please feel free to call or text this number.\n\nPlease confirm receipt of this message. Thank you!";}
+if(filter==="RptEntry"&&insType==="Self Pay"&&account==="Ortho Rhode Island")return "Hi "+first+"!\n\nThis is New England Medical Solutions. Dr. "+provLast+" at Ortho Rhode Island prescribed a cold therapy device to support your recovery after your upcoming "+bodyPart+" procedure on "+dos+".\n\nYou have two options to choose from: the Therm-X HOME or the SQUID GO.\n\nPlease click here: newenglandmedicalsolutions.us/orioop (PASSWORD = ORI) to review a quick comparison of how each device works, along with pricing details. Once you select your preferred option, you'll be guided through a short confirmation form so we can coordinate delivery prior to your procedure.\n\nIf you have any questions or would prefer to speak with someone directly, simply reply to this message and our team will be happy to assist you.\n\nWe look forward to supporting your recovery.\n\u2014 New England Medical Solutions";
+if(filter==="Court")return "Hey, "+first+"! This is Mason from New England Medical Solutions. I hope that your procedure went well and you are recovering comfortably. How's it going with the "+p1+"? Is everything functioning properly for you?";
+if(filter==="Ext")return "Hey, "+first+"! How's it going with the "+deviceName+"? Would you like me to see if we can get another 30 days covered through "+insType+"?";
+if(filter==="Feed")return "Hello "+first+",\n\nWe truly value your feedback and would love to hear about your experience with New England Medical Solutions and Dr. "+provLast+".\n\nYour input helps us continue improving the care and service we provide. When you have a moment, please click the link below to complete a short feedback form. It should only take a few minutes.\n\nhttps://forms.office.com/r/462YD2vVVr\n\nThank you again for your time and support!\n\u2013 New England Medical Solutions";
+if(filter==="FitNeed"&&deviceName==="SAM 2.0")return "Hey "+first+"!\n\nMy name is Mason Palmieri with New England Medical Solutions. We work with Dr. "+provLast+"'s office to provide patients the SAM 2.0. Dr. "+provLast+" prescribed the device for your "+bodyPart+" injury. The SAM stands for Sustained Acoustic Medicine, which acts in a similar way to Ultrasound. It is clinically proven to improve recovery time. We just received authorization through your adjuster, it is covered through worker's comp, and there is no cost out of pocket for you.\n\nI was hoping to schedule a time to come by, deliver the device, and show you how to use it. The address I have on file is "+addr+" "+city+", "+state+" "+zipFmt+"\n\nCould you please confirm this address is correct? I have availability this afternoon between 2:30-3:30PM. Please let me know if this works, thanks!!";
+if(filter==="FitNeed"||(filter==="UrgOrd"&&fulType==="In Person"))return "Hey "+first+"!\n\nMy name is Mason Palmieri with New England Medical Solutions. We work with Dr. "+provLast+"'s office to provide patients the "+deviceName+" after surgery. The machine provides cold and compression therapy to your "+bodyPart+" to help manage pain and swelling.\n\nWork Comp covers the machine at no cost to you.\n\nI was hoping to schedule a time to come by, deliver the machine, set it up, and show you how to use it before surgery. The address I have on file:\n"+addr+"\n"+city+", "+state+" "+zipFmt+"\n\nCould you please confirm this address is correct? I have availability:\n\nPlease let me know if this works, thanks!!";
+var pickDate=gv("PickRetDate",P.PickRetDate);
+return "Hello "+first+",\n\nThis is Mason Palmieri with New England Medical Solutions. Unfortunately, we will not be able to get another month covered with the "+p1+". Can I come by "+(pickDate||"[date]")+" to pick the machine up? I have availability between:\n\nThanks!";}
 
 return React.createElement("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:1000,display:"flex",justifyContent:"center",alignItems:isMobile?"flex-start":"flex-start",paddingTop:isMobile?0:20,overflowY:"auto"}},
 React.createElement("div",{style:{background:cl.lt,borderRadius:isMobile?0:8,width:isMobile?"100%":"96%",maxWidth:1150,maxHeight:isMobile?"100vh":"92vh",height:isMobile?"100vh":"auto",overflowY:"auto",boxShadow:"0 8px 32px rgba(0,0,0,.3)"}},
@@ -176,60 +201,65 @@ React.createElement("div",{style:{padding:16}},
 React.createElement("div",{style:{display:"flex",gap:10,alignItems:"center",marginBottom:10,flexWrap:"wrap"}},
 React.createElement("label",{style:{fontWeight:600,fontSize:12}},"Status:"),
 React.createElement(Sel,{value:(ed.Status !== undefined ? ed.Status : v(row,P.Status)),onChange:function(x){setEd(function(p){return Object.assign({},p,{Status:x})})}}),
+(!filter||sf("Tracking"))&&React.createElement(React.Fragment,null,
 React.createElement("label",{style:{fontWeight:600,fontSize:12,marginLeft:10}},"Tracking:"),
-React.createElement("input",{value:(ed.Tracking !== undefined ? ed.Tracking : v(row,P.Tracking)),onChange:function(e){setEd(function(p){return Object.assign({},p,{Tracking:e.target.value})})},style:{border:"1px solid "+cl.bd,borderRadius:3,padding:"4px 8px",fontSize:12,width:130}}),
+React.createElement("input",{value:(ed.Tracking !== undefined ? ed.Tracking : v(row,P.Tracking)),onChange:function(e){setEd(function(p){return Object.assign({},p,{Tracking:e.target.value})})},style:{border:"1px solid "+cl.bd,borderRadius:3,padding:"4px 8px",fontSize:12,width:130}})
+),
+(!filter||sf("RetTracking"))&&React.createElement(React.Fragment,null,
 React.createElement("label",{style:{fontWeight:600,fontSize:12,marginLeft:10}},"Return Tracking:"),
 React.createElement("input",{value:(ed.RetTracking !== undefined ? ed.RetTracking : v(row,P.RetTracking)),onChange:function(e){setEd(function(p){return Object.assign({},p,{RetTracking:e.target.value})})},style:{border:"1px solid "+cl.bd,borderRadius:3,padding:"4px 8px",fontSize:12,width:130}})
+)
 ),
 // Task Actions Section
 React.createElement("div",{style:{background:cl.wh,borderRadius:6,padding:10,marginBottom:12}},
 React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
 React.createElement("span",{style:{fontWeight:700,fontSize:11,color:cl.dk}},"Task Actions"),
-tasks.length>0&&React.createElement("div",{style:{display:"flex",gap:4,flexWrap:"wrap"}},
+React.createElement("div",{style:{display:"flex",gap:4,flexWrap:"wrap"}},
+React.createElement("button",{onClick:function(){setShowMsg(true)},style:{background:"#6c3483",color:cl.wh,border:"none",borderRadius:3,padding:"3px 8px",fontSize:9,cursor:"pointer",fontFamily:"inherit"}},"Draft Message"),
 (tasks.indexOf("FitNeed")>=0||tasks.indexOf("UrgOrd")>=0)&&React.createElement("button",{onClick:schedFitting,style:{background:"#2e7d32",color:cl.wh,border:"none",borderRadius:3,padding:"3px 8px",fontSize:9,cursor:"pointer",fontFamily:"inherit"}},"Schedule Fitting"),
 tasks.indexOf("PickNeed")>=0&&React.createElement("button",{onClick:schedPickup,style:{background:"#2e7d32",color:cl.wh,border:"none",borderRadius:3,padding:"3px 8px",fontSize:9,cursor:"pointer",fontFamily:"inherit"}},"Schedule Pickup"),
 tasks.indexOf("FulNeed")>=0&&React.createElement("button",{onClick:markShipped,style:{background:"#1565c0",color:cl.wh,border:"none",borderRadius:3,padding:"3px 8px",fontSize:9,cursor:"pointer",fontFamily:"inherit"}},"Mark Shipped"),
 tasks.indexOf("RetNeed")>=0&&React.createElement("button",{onClick:markRetShipped,style:{background:"#e65100",color:cl.wh,border:"none",borderRadius:3,padding:"3px 8px",fontSize:9,cursor:"pointer",fontFamily:"inherit"}},"Mark Return Shipped")
 )
 ),
-React.createElement("div",{style:{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"1fr 1fr 1fr 1fr",gap:8,fontSize:11}},
+React.createElement("div",{style:{display:"grid",gridTemplateColumns:isMobile?"1fr 1fr":"repeat(auto-fill,minmax(140px,1fr))",gap:8,fontSize:11}},
 // Fitting fields
-React.createElement("div",null,
+sf("FitDate")&&React.createElement("div",null,
 React.createElement("div",{style:lbl},"Fitting Date"),
 React.createElement("input",{type:"date",value:gv("FitDate",P.FitDate),onChange:function(e){sv("FitDate",e.target.value)},style:inp})
 ),
-tgl("BookDel",P.BookDel,"Book Delivery"),
+sf("BookDel")&&tgl("BookDel",P.BookDel,"Book Delivery"),
 // Pickup fields
-React.createElement("div",null,
+sf("PickRetDate")&&React.createElement("div",null,
 React.createElement("div",{style:lbl},"Pickup/Return Date"),
 React.createElement("input",{type:"date",value:gv("PickRetDate",P.PickRetDate),onChange:function(e){sv("PickRetDate",e.target.value)},style:inp})
 ),
-tgl("BookRet",P.BookRet,"Book Return"),
+sf("BookRet")&&tgl("BookRet",P.BookRet,"Book Return"),
 // Courtesy Call
-tgl("CourtCall",P.CourtCall,"Courtesy Call"),
+sf("CourtCall")&&tgl("CourtCall",P.CourtCall,"Courtesy Call"),
 // DOS
-React.createElement("div",null,
+sf("DOS")&&React.createElement("div",null,
 React.createElement("div",{style:lbl},"Surgery Date (DOS)"),
 React.createElement("input",{type:"date",value:gv("DOS",P.DOS),onChange:function(e){sv("DOS",e.target.value)},style:inp})
 ),
 // PO Reference
-React.createElement("div",null,
+sf("PORef")&&React.createElement("div",null,
 React.createElement("div",{style:lbl},"PO Reference"),
 React.createElement("input",{value:gv("PORef",P.PORef),onChange:function(e){sv("PORef",e.target.value)},style:inp,placeholder:"PO #"})
 ),
 // Feedback Form
-React.createElement("div",null,
+sf("FeedForm")&&React.createElement("div",null,
 React.createElement("div",{style:lbl},"Feedback Form"),
 React.createElement("input",{value:gv("FeedForm",P.FeedForm),onChange:function(e){sv("FeedForm",e.target.value)},style:inp,placeholder:"Form link/ID"})
 )
 ),
 // Ext Confirmation + Svc Update row
-(v(row,P.ExtConf)||v(row,P.SvcUpd)==="Yes")&&React.createElement("div",{style:{display:"flex",gap:12,marginTop:8,paddingTop:8,borderTop:"1px solid #eee",fontSize:10}},
-v(row,P.ExtConf)&&React.createElement("div",{style:{flex:1}},
+(sf("ExtConf")&&v(row,P.ExtConf)||sf("SvcUpd")&&v(row,P.SvcUpd)==="Yes")&&React.createElement("div",{style:{display:"flex",gap:12,marginTop:8,paddingTop:8,borderTop:"1px solid #eee",fontSize:10}},
+sf("ExtConf")&&v(row,P.ExtConf)&&React.createElement("div",{style:{flex:1}},
 React.createElement("span",{style:{fontWeight:600,color:"#555"}},"Ext Confirmation: "),
 React.createElement("span",{style:{color:cl.dk}},v(row,P.ExtConf))
 ),
-v(row,P.SvcUpd)==="Yes"&&React.createElement("div",null,
+sf("SvcUpd")&&v(row,P.SvcUpd)==="Yes"&&React.createElement("div",null,
 React.createElement("span",{style:{fontWeight:600,color:"#555"}},"Status Update Needed "),
 React.createElement("button",{onClick:function(){sv("SvcUpd","")},style:{background:"#2e7d32",color:cl.wh,border:"none",borderRadius:3,padding:"2px 8px",fontSize:9,cursor:"pointer",fontFamily:"inherit"}},"Clear Flag")
 )
@@ -258,6 +288,27 @@ React.createElement("button",{onClick:onClose,style:{background:cl.acc,color:cl.
 React.createElement("button",{onClick:save,disabled:saving,style:{background:cl.dk,color:cl.wh,border:"none",borderRadius:4,padding:"10px 22px",fontSize:13,fontWeight:600,cursor:"pointer",opacity:saving?0.6:1}},saving?"Saving\u2026":"Update ALL")
 ),
 demo&&React.createElement("p",{style:{fontSize:9,color:"#666",marginTop:6,textAlign:"right"}},"Demo mode \u2014 asset sync simulated locally.")
+)
+),
+// Draft Message Popup
+showMsg&&React.createElement("div",{style:{position:"fixed",inset:0,background:"rgba(0,0,0,.6)",zIndex:1100,display:"flex",justifyContent:"center",alignItems:"center"}},
+React.createElement("div",{style:{background:cl.wh,borderRadius:8,width:"90%",maxWidth:550,maxHeight:"80vh",display:"flex",flexDirection:"column",boxShadow:"0 8px 32px rgba(0,0,0,.3)"}},
+React.createElement("div",{style:{background:cl.dk,padding:"10px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",borderRadius:"8px 8px 0 0"}},
+React.createElement("span",{style:{color:cl.wh,fontWeight:700,fontSize:13}},"Draft Message \u2014 "+v(row,P.First)+" "+v(row,P.Last)),
+React.createElement("button",{onClick:function(){setShowMsg(false)},style:{background:"none",border:"none",color:cl.wh,fontSize:18,cursor:"pointer",fontWeight:700}},"\u00d7")
+),
+React.createElement("div",{style:{padding:12}},
+React.createElement("label",{style:{display:"flex",alignItems:"center",gap:6,fontSize:11,marginBottom:8,cursor:"pointer"}},
+React.createElement("input",{type:"checkbox",checked:preAuth,onChange:function(){setPreAuth(function(p){return !p})}}),
+React.createElement("span",{style:{fontWeight:600,color:cl.dk}},"Pre-Auth Override"),
+React.createElement("span",{style:{color:"#888",fontSize:10}},"(WC awaiting authorization)")
+),
+React.createElement("textarea",{readOnly:true,value:draftMessage(),style:{width:"100%",minHeight:220,border:"1px solid "+cl.bd,borderRadius:4,padding:10,fontSize:12,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",lineHeight:1.5,background:"#f9f9f9"}}),
+React.createElement("div",{style:{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}},
+React.createElement("button",{onClick:function(){navigator.clipboard.writeText(draftMessage())},style:{background:"#2e7d32",color:cl.wh,border:"none",borderRadius:4,padding:"8px 16px",fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}},"Copy to Clipboard"),
+React.createElement("button",{onClick:function(){setShowMsg(false)},style:{background:cl.acc,color:cl.wh,border:"none",borderRadius:4,padding:"8px 16px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}},"Close")
+)
+)
 )
 )
 );
@@ -307,7 +358,7 @@ React.createElement("div",{style:{fontSize:10,fontStyle:"italic",color:"#777",ma
 );})
 )
 ),
-detail&&sel!==null&&data[sel]&&React.createElement(Detail,{row:data[sel],idx:sel,onClose:function(){setDetail(false)},onSave:onSave,demo:isDemo,assets:assets,catalog:catalog})
+detail&&sel!==null&&data[sel]&&React.createElement(Detail,{row:data[sel],idx:sel,onClose:function(){setDetail(false)},onSave:onSave,demo:isDemo,assets:assets,catalog:catalog,filter:flt})
 );
 }
 
